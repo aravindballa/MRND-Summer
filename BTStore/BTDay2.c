@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include<stdio.h>
+#include<string.h>
 
 typedef struct Student{
 	int rollno;
@@ -19,8 +20,9 @@ typedef struct TLeafPage{
 	int pagetype;
 	int tableId;
 	teachingstaff data[7];
-	char unused[52];
+	char unused[48];
 	int index;
+	int previous;
 } tleafpage; //512
 
 typedef struct LeafPage{
@@ -195,12 +197,14 @@ void BuildBTree3(char* csv, char* tcsv, char* bin)
 	memset(&tnlpage, 0, sizeof(nonleafpage));
 	tnlpage.pagetype = 2;
 
+	lpo = 0; //no of total pages
+	int prev = -1;
+
 	while (!feof(fp) && !feof(fpt))
 	{
 		j = 0;
 		while (j <= recordCount && j <= trecordCount)
 		{
-			lpo = 0;
 			leafpage lpage;
 			memset(&lpage, 0, sizeof(leafpage));
 			lpage.tableId = 1;
@@ -214,14 +218,14 @@ void BuildBTree3(char* csv, char* tcsv, char* bin)
 			for (i = 0; i < 10; i++)
 			{
 				fscanf(fp, "%d,%[^,],%[^\n]\n", &lpage.data[i].rollno, &lpage.data[i].name, &lpage.data[i].college);
-				PrintStudent(lpage.data[i]);
+				//PrintStudent(lpage.data[i]);
 				lpage.index = i;
 				recordCount++;
 				if (feof(fp))
 					break;
 			}
 
-			nlpage.offsets[lpo] = ftell(fw);
+			nlpage.offsets[j] = ftell(fw);
 			printf("%d ", ftell(fw));
 			fwrite(&lpage, sizeof(leafpage), 1, fw);
 			lpo++;
@@ -238,7 +242,7 @@ void BuildBTree3(char* csv, char* tcsv, char* bin)
 			//teachers
 			for (i = 0; i < 7; i++)
 			{
-				fscanf(fpt, "%d,%[^,],%[^,],%[^\n]\n", &tlpage.data[i].staffid, &tlpage.data[i].name, &tlpage.data[i].college, &tlpage.data[1].dept);
+				fscanf(fpt, "%d,%[^,],%[^,],%[^\n]\n", &tlpage.data[i].staffid, &tlpage.data[i].name, &tlpage.data[i].college, &tlpage.data[i].dept);
 				PrintTeacher(tlpage.data[i]);
 				tlpage.index = i;
 				trecordCount++;
@@ -246,8 +250,10 @@ void BuildBTree3(char* csv, char* tcsv, char* bin)
 					break;
 			}
 
-			tnlpage.offsets[lpo] = ftell(fw);
+			tnlpage.offsets[j] = ftell(fw);
 			printf("%d ", ftell(fw));
+			tlpage.previous = prev;
+			prev = ftell(fw);
 			fwrite(&tlpage, sizeof(tleafpage), 1, fw);
 			lpo++;
 
@@ -276,11 +282,92 @@ void BuildBTree3(char* csv, char* tcsv, char* bin)
 	fclose(fw);
 }
 
+int isEqual(char *a, char *b)
+{
+	int i;
+	for (i = 0; a[i] != '\r', b[i] != '\r', a[i] != '\0'; i++)
+		if (a[i] != b[i])
+			return 0;
+
+	return 1;
+}
+
+int MatchingRecords(int rollno, char* bin)
+{
+	//given student id, find teachers in his college
+	FILE* fp = fopen(bin, "rb+");
+	int i, teachers = 0;
+	char college[20] = { '\0' };
+
+	tablesector tsec;
+	memset(&tsec, 0, sizeof(tablesector));
+	fread(&tsec, sizeof(tablesector), 1, fp);
+
+	//search student tree
+	int soffset = tsec.rootPageIds[0];
+	nonleafpage nlp;
+	memset(&nlp, 0, sizeof(nonleafpage));
+	fseek(fp, soffset, SEEK_SET);
+	fread(&nlp, sizeof(nonleafpage), 1, fp);
+
+	for (i = 0; i < 63; i++)
+	{
+		//printf("%d\n", nlp.keys[i]);
+		if (rollno <= nlp.keys[i]) //< works
+			break;
+	}
+
+	leafpage lp;
+	memset(&lp, 0, sizeof(leafpage));
+	fseek(fp, nlp.offsets[i], SEEK_SET);
+	fread(&lp, sizeof(leafpage), 1, fp);
+
+	for (i = 0; i < 10; i++)
+	{
+		//PrintStudent(lp.data[i]);
+		if (lp.data[i].rollno == rollno)
+			break;
+	}
+
+	char name[20] = { '\0' };
+	strcpy(name, lp.data[i].name);
+	strcpy(college, lp.data[i].college);
+	printf("%s\n", college);
+
+	//search teacher tree
+	memset(&nlp, 0, sizeof(nonleafpage));
+	fseek(fp, tsec.rootPageIds[1], SEEK_SET);
+	fread(&nlp, sizeof(nonleafpage), 1, fp);
+
+	tleafpage tlp;
+	memset(&tlp, 0, sizeof(tleafpage));
+	fseek(fp, nlp.offsets[63], SEEK_SET);
+
+	do
+	{
+		memset(&tlp, 0, sizeof(tleafpage));
+		fread(&tlp, sizeof(tleafpage), 1, fp);
+		for (i = 0; i < 7; i++)
+		{
+			//PrintTeacher(tlp.data[i]);
+			//printf("%d\n", isEqual(tlp.data[i].college, college));
+			if (isEqual(tlp.data[i].college, college))
+				teachers++;
+		}
+		
+		fseek(fp, tlp.previous, SEEK_SET);
+	} while (tlp.previous != -1);
+	
+
+	printf("%d teachers are teaching %s.", teachers, name);
+}
+
 main()
 {
 	//printf("%d %d %d %d", sizeof(teachingstaff), sizeof(tleafpage), sizeof(nonleafpage), sizeof(tablesector));
+	//BuildBTree3("640studs.csv", "teacherdata.csv", "store.bin");
 
-	BuildBTree3("640studs.csv", "teacherdata.csv", "store.bin");
+	MatchingRecords(68, "store.bin");
 
 	_getch();
 }
