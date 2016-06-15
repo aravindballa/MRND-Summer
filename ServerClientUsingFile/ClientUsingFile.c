@@ -7,11 +7,11 @@ char buffer[1024] = { '\0' };
 int fr_pos = -1;
 
 DWORD WINAPI ThreadFunc(void* data) {
-	FILE *fr = fopen("C:\\Users\\Aravind Balla\\Documents\\Visual Studio 2013\\RnDSummerProjects\\ServerUsingFile\\ServerUsingFile\\serv.txt", "r+");
+	FILE *fr = fopen("serv.txt", "r+");
 	FILE *ftemp;
 	while (1)
 	{
-		ftemp = fopen("C:\\Users\\Aravind Balla\\Documents\\Visual Studio 2013\\RnDSummerProjects\\ServerUsingFile\\ServerUsingFile\\serv.txt", "r+");
+		ftemp = fopen("serv.txt", "r+");
 		fseek(ftemp, 0, SEEK_END);
 		//printf("%d\n", ftell(ftemp));
 		if (fr_pos != ftell(ftemp))
